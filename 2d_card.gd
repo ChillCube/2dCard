@@ -13,6 +13,7 @@ static var dragging_card : Card2D = null
 @export var is_draggable : bool = true
 
 @export_group("Grid Settings")
+@export var allow_stacking : bool = false
 ## If true, the card will try to snap to a grid when dropped outside the hand
 @export var use_grid_placement : bool = false
 ## Reference to the Grid node in your scene
@@ -161,21 +162,50 @@ func _snap_to_grid(pos: Vector2) -> void:
 	# 1. Reparent so we aren't stuck in Hand space
 	if get_parent() != grid.get_parent():
 		var old_pos = global_position
-		get_parent().remove_child(self)
+		if get_parent(): get_parent().remove_child(self)
 		grid.get_parent().add_child(self)
 		global_position = old_pos
 
-	# 2. Get the actual world position from the grid
+	# 2. Get the target grid coordinate and world position
 	var grid_coord = grid.get_grid_coordinate(pos)
 	var snapped_world_pos = grid.get_grid_position(grid_coord)
 
-	# 3. Tell the mover where to go
+	# 3. OCCUPANCY CHECK (Toggleable)
+	if not allow_stacking:
+		if _is_grid_position_occupied(snapped_world_pos):
+			print("Space occupied! Returning to hand.")
+			_return_to_hand(pos)
+			return
+
+	# 4. Tell the mover where to go
 	if mover:
 		mover.global_target_position = snapped_world_pos
 	else:
 		global_position = snapped_world_pos
 		
 	print("Snapped to Grid Pos: ", snapped_world_pos)
+
+## Helper function to detect if another card is already at the target snapped position
+func _is_grid_position_occupied(target_world_pos: Vector2) -> bool:
+	var space_state = get_world_2d().direct_space_state
+	
+	# We use a point query to see what is at the center of the target tile
+	var query = PhysicsPointQueryParameters2D.new()
+	query.position = target_world_pos
+	query.collide_with_areas = true
+	# Use the area's collision mask to find other cards
+	query.collision_mask = area.collision_mask 
+	
+	var results = space_state.intersect_point(query)
+	
+	for result in results:
+		var hit_area = result.collider
+		# If the collider is an Area2D belonging to a DIFFERENT Card2D...
+		if hit_area != area and hit_area.get_parent() is Card2D:
+			# Only count it as "occupied" if that card isn't currently being dragged
+			if not hit_area.get_parent().is_dragging:
+				return true
+	return false
 
 func _get_placement_under_mouse() -> PlacementArea2D:
 	var areas = area.get_overlapping_areas()
