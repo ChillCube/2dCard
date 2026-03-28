@@ -6,11 +6,23 @@ static var hovered_card : Card2D = null
 static var dragging_card : Card2D = null 
 
 # --- Properties ---
+@export var is_draggable : bool = true
+
 @export_group("Movement Settings")
 @export var speed: float = 20.0
-@export var bounce: bool = true
 @export var smooth_movement_enabled: bool = true
-@export var is_draggable : bool = true
+@export_subgroup("Bounce")
+@export var bounce: bool = true
+@export var disable_bounce_while_dragging:bool = true;
+@export_subgroup("Tilt")
+@export var movement_tilt : bool = true;
+@export var disable_movement_tilt_while_dragging:bool = true;
+@export_subgroup("Fake3D")
+@export var fake_3d : bool = false;
+
+@export_group("Scale Settings")
+@export var default_scale : float = 1;
+@export var grabbed_scale : float = 1.2;
 
 @export_group("Grid Settings")
 @export var allow_stacking : bool = false
@@ -18,6 +30,8 @@ static var dragging_card : Card2D = null
 @export var use_grid_placement : bool = false
 ## Reference to the Grid node in your scene
 @export var grid : Grid 
+
+var poly_mesh : Polygon2D
 
 # --- State Variables ---
 var mover : Node 
@@ -33,15 +47,60 @@ signal object_picked_up
 signal object_placed
 
 func _ready() -> void:
+	_setup_collision()
+	if fake_3d:
+		_convert_to_polygon()
+	
 	mover = await SmoothMovement.init(self)
 	mover.speed = speed
 	mover.bounce = bounce
+	mover.skew_on = false;
+	mover.tilt_on = false;
+	mover.perspective_on = fake_3d;
+	
 	
 	if !hand and get_parent() is CardHand:
 		hand = get_parent()
 	
-	_setup_collision()
 	_setup_grid_logic()
+
+func _convert_to_polygon() -> void:
+	if not texture: return
+	
+	# 1. Determine the source area (The frame on the spritesheet)
+	var region : Rect2
+	if region_enabled:
+		region = region_rect
+	else:
+		region = Rect2(Vector2.ZERO, texture.get_size())
+	
+	var size = region.size
+	poly_mesh = Polygon2D.new()
+	poly_mesh.texture = texture
+	
+	# 2. Define the 4 corners (The Shape)
+	# We center them so the card rotates/tilts around its middle
+	var offset = size / 2.0
+	var points = PackedVector2Array([
+		Vector2(-offset.x, -offset.y), # Top-Left
+		Vector2(offset.x, -offset.y),  # Top-Right
+		Vector2(offset.x, offset.y),   # Bottom-Right
+		Vector2(-offset.x, offset.y)   # Bottom-Left
+	])
+	
+	poly_mesh.polygon = points
+	
+	# 3. Define the UVs (The "Window" into the spritesheet)
+	# Instead of 0 to Size, we go from Region.Position to Region.End
+	poly_mesh.uv = PackedVector2Array([
+		Vector2(region.position.x, region.position.y),           # Top-Left of frame
+		Vector2(region.position.x + size.x, region.position.y),  # Top-Right of frame
+		Vector2(region.position.x + size.x, region.position.y + size.y), # Bottom-Right
+		Vector2(region.position.x, region.position.y + size.y)   # Bottom-Left
+	])
+	
+	add_child(poly_mesh)
+	self.texture = null # Hide the original sprite so they don't overlap
 
 func _setup_grid_logic() -> void:
 	if use_grid_placement:
@@ -99,19 +158,26 @@ func _input(event: InputEvent) -> void:
 			_stop_dragging()
 
 func _process(_delta: float) -> void:
+	mover.tilt_on = movement_tilt;
+	mover.bounce = bounce;
+	mover.global_target_scale = Vector2(default_scale, default_scale);
 	if is_dragging:
+		mover.global_target_scale = Vector2(grabbed_scale, grabbed_scale);
+		if disable_bounce_while_dragging:
+			mover.bounce = false;
+		if disable_movement_tilt_while_dragging:
+			mover.tilt_on = false;
 		var target_pos = get_global_mouse_position()
 		if smooth_movement_enabled and mover:
 			mover.global_target_position = target_pos
 		else:
 			global_position = target_pos
-	# Note: If not dragging, SmoothMovement (mover) will naturally 
-	# keep moving the card toward its last assigned global_target_position.
 
 func _start_dragging() -> void:
 	if not is_dragging and dragging_card == null:
 		dragging_card = self 
 		is_dragging = true
+		z_index = 2;
 		
 		# Disable grid logic while dragging so it doesn't fight the mouse
 		if grid_logic: grid_logic.continous_movement = false
@@ -133,6 +199,7 @@ func _stop_dragging() -> void:
 	
 	is_dragging = false
 	dragging_card = null 
+	z_index = 0;
 	
 	var drop_pos = global_position
 	
