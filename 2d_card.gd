@@ -26,7 +26,7 @@ var is_dragging : bool = false
 var area : Area2D
 @export var hand : CardHand
 
-# This acts as our internal GridObject controller
+# This acts as our internal GridObject controller .
 var grid_logic : GridObject = null
 
 signal object_picked_up
