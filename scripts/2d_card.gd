@@ -6,10 +6,13 @@ static var hovered_card : Card2D = null
 static var dragging_card : Card2D = null 
 
 # --- Properties ---
+
+@export var _name : String;
+@export_multiline var description : String;
 @export var is_draggable : bool = true
 
 @export_group("Movement Settings")
-@export var speed: float = 20.0
+@export var speed: float = 15.0
 @export var smooth_movement_enabled: bool = true
 @export_subgroup("Bounce")
 @export var bounce: bool = true
@@ -34,7 +37,7 @@ static var dragging_card : Card2D = null
 var poly_mesh : Polygon2D
 
 # --- State Variables ---
-var mover : Node 
+var mover : SmoothMovement 
 var mouse_touching : bool = false
 var is_dragging : bool = false
 var area : Area2D
@@ -44,9 +47,11 @@ var area : Area2D
 var grid_logic : GridObject = null
 
 signal object_picked_up
+signal hovering_over_card(Card2D)
 signal object_placed
 
 func _ready() -> void:
+	
 	_setup_collision()
 	if fake_3d:
 		_convert_to_polygon()
@@ -54,15 +59,26 @@ func _ready() -> void:
 	mover = await SmoothMovement.init(self)
 	mover.speed = speed
 	mover.bounce = bounce
-	mover.skew_on = false;
+	#mover.skew_on = false;
 	mover.tilt_on = false;
-	mover.perspective_on = fake_3d;
+	#mover.perspective_on = fake_3d;
 	
 	
 	if !hand and get_parent() is CardHand:
 		hand = get_parent()
 	
+	if hand:
+		if hand.grid:
+			grid = hand.grid;
+	
 	_setup_grid_logic()
+
+
+func _mouse_touching(): ## This is a stub that can be ued by other nodes to run code when the mouse is hovering over the card
+	pass 
+
+func _not_mouse_touching(): ## This is a stub that can be ued by other nodes to run code when the mouse is not hovering over the card
+	pass 
 
 func _convert_to_polygon() -> void:
 	if not texture: return
@@ -137,9 +153,12 @@ func _setup_collision() -> void:
 
 func _on_mouse_entered() -> void:
 	mouse_touching = true
-	if dragging_card == null: hovered_card = self
+	if dragging_card == null: 
+		hovered_card = self
+		emit_signal("hovering_over_card", self);
 
 func _on_mouse_exited() -> void:
+	print("mouse exited card")
 	mouse_touching = false
 	if hovered_card == self: hovered_card = null
 
@@ -158,6 +177,12 @@ func _input(event: InputEvent) -> void:
 			_stop_dragging()
 
 func _process(_delta: float) -> void:
+	
+	if mouse_touching:
+		_mouse_touching();
+	else:
+		_not_mouse_touching();
+	
 	mover.tilt_on = movement_tilt;
 	mover.bounce = bounce;
 	mover.global_target_scale = Vector2(default_scale, default_scale);
@@ -238,18 +263,19 @@ func _snap_to_grid(pos: Vector2) -> void:
 	var snapped_world_pos = grid.get_grid_position(grid_coord)
 
 	# 3. OCCUPANCY CHECK (Toggleable)
-	if not allow_stacking:
-		if _is_grid_position_occupied(snapped_world_pos):
+	if _is_grid_position_occupied(snapped_world_pos):
+		if not allow_stacking:
 			print("Space occupied! Returning to hand.")
 			_return_to_hand(pos)
 			return
-
+	
 	# 4. Tell the mover where to go
 	if mover:
 		mover.global_target_position = snapped_world_pos
 	else:
 		global_position = snapped_world_pos
 		
+	mover.global_target_rotation = randf_range(-0.2, 0.2);
 	print("Snapped to Grid Pos: ", snapped_world_pos)
 
 ## Helper function to detect if another card is already at the target snapped position
