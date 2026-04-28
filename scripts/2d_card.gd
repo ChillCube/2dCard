@@ -158,7 +158,7 @@ func _on_mouse_entered() -> void:
 		emit_signal("hovering_over_card", self);
 
 func _on_mouse_exited() -> void:
-	print("mouse exited card")
+	# print("mouse exited card")
 	mouse_touching = false
 	if hovered_card == self: hovered_card = null
 
