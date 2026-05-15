@@ -317,3 +317,4 @@ func _return_to_hand(drop_pos: Vector2) -> void:
 	hand.use_hover_lift = true
 	hand.use_z_index_hover = true
 	hand.use_horizontal_spread = true
+
