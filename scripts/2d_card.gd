@@ -8,28 +8,28 @@ static var dragging_card : Card2D = null
 
 # --- Properties ---
 
-@export var _name : String;
-@export_multiline var description : String;
-@export var is_draggable : bool = true
+@export var _name : String; ## Display name of this card
+@export_multiline var description : String; ## Flavour text shown in card UI
+@export var is_draggable : bool = true ## Whether the player can drag this card with the mouse
 
 @export_group("Movement Settings")
-@export var speed: float = 15.0
-@export var smooth_movement_enabled: bool = true
+@export var speed: float = 15.0 ## SmoothMovement lerp speed for following mouse and snapping
+@export var smooth_movement_enabled: bool = true ## Use SmoothMovement lerp instead of instant position
 @export_subgroup("Bounce")
-@export var bounce: bool = true
-@export var disable_bounce_while_dragging:bool = true;
+@export var bounce: bool = true ## Adds elastic overshoot when the card reaches its target
+@export var disable_bounce_while_dragging:bool = true; ## Turns off bounce while actively held
 @export_subgroup("Tilt")
-@export var movement_tilt : bool = true;
-@export var disable_movement_tilt_while_dragging:bool = true;
+@export var movement_tilt : bool = true; ## Tilts the card based on horizontal velocity
+@export var disable_movement_tilt_while_dragging:bool = true; ## Disables tilt while dragging so the card stays flat
 @export_subgroup("Fake3D")
-@export var fake_3d : bool = false;
+@export var fake_3d : bool = false; ## Replaces the Sprite2D with a Polygon2D for pseudo-3D perspective skew
 
 @export_group("Scale Settings")
-@export var default_scale : float = 1;
-@export var grabbed_scale : float = 1.2;
+@export var default_scale : float = 1; ## Normal scale when idle or in hand
+@export var grabbed_scale : float = 1.2; ## Scale applied while the card is being dragged
 
 @export_group("Grid Settings")
-@export var allow_stacking : bool = false
+@export var allow_stacking : bool = false ## Allow multiple cards to occupy the same grid cell
 ## If true, the card will try to snap to a grid when dropped outside the hand
 @export var use_grid_placement : bool = false
 ## Reference to the Grid node in your scene
@@ -42,7 +42,7 @@ var mover : SmoothMovement
 var mouse_touching : bool = false
 var is_dragging : bool = false
 var area : Area2D
-@export var hand : CardHand
+@export var hand : CardHand ## The CardHand this card belongs to; auto-detected if parent is a CardHand
 
 # This acts as our internal GridObject controller .
 var grid_logic : GridObject = null
@@ -51,8 +51,8 @@ signal object_picked_up
 signal hovering_over_card(Card2D)
 signal object_placed
 
-func _ready() -> void:
-	
+func _ready() -> void: ## Sets up collision, optional Polygon2D mesh, SmoothMovement, and grid logic
+
 	_setup_collision()
 	if fake_3d:
 		_convert_to_polygon()
@@ -81,7 +81,7 @@ func _mouse_touching(): ## This is a stub that can be ued by other nodes to run 
 func _not_mouse_touching(): ## This is a stub that can be ued by other nodes to run code when the mouse is not hovering over the card
 	pass 
 
-func _convert_to_polygon() -> void:
+func _convert_to_polygon() -> void: ## Builds a Polygon2D from the sprite texture/region for fake-3D perspective skew
 	if not texture: return
 	
 	# 1. Determine the source area (The frame on the spritesheet)
@@ -119,7 +119,7 @@ func _convert_to_polygon() -> void:
 	add_child(poly_mesh)
 	self.texture = null # Hide the original sprite so they don't overlap
 
-func _setup_grid_logic() -> void:
+func _setup_grid_logic() -> void: ## Attaches a GridObject child so the card can snap to a Grid when dropped outside the hand
 	if use_grid_placement:
 		# We attach a GridObject dynamically so we don't have to 
 		# change the inheritance of Card2D
@@ -128,7 +128,7 @@ func _setup_grid_logic() -> void:
 		grid_logic.continous_movement = true
 		add_child(grid_logic)
 
-func _setup_collision() -> void:
+func _setup_collision() -> void: ## Programmatically creates an Area2D with a RectangleShape2D sized from the sprite texture
 	if texture == null:
 		push_warning("No texture found on Card2D: " + name + ". Collision cannot be generated.")
 		return
@@ -152,18 +152,18 @@ func _setup_collision() -> void:
 	area.mouse_exited.connect(_on_mouse_exited)
 	area.input_event.connect(_on_input_event)
 
-func _on_mouse_entered() -> void:
+func _on_mouse_entered() -> void: ## Tracks hover state and sets the global hovered_card reference
 	mouse_touching = true
 	if dragging_card == null: 
 		hovered_card = self
 		emit_signal("hovering_over_card", self);
 
-func _on_mouse_exited() -> void:
+func _on_mouse_exited() -> void: ## Clears hover state and removes this card from hovered_card if it was the last hovered
 	# print("mouse exited card")
 	mouse_touching = false
 	if hovered_card == self: hovered_card = null
 
-func _on_input_event(_viewport: Node, event: InputEvent, _shape_idx: int) -> void:
+func _on_input_event(_viewport: Node, event: InputEvent, _shape_idx: int) -> void: ## Starts drag on left-click press; stops it on release
 	if not is_draggable: return 
 	
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
@@ -172,13 +172,13 @@ func _on_input_event(_viewport: Node, event: InputEvent, _shape_idx: int) -> voi
 		else:
 			if dragging_card == self: _stop_dragging()
 
-func _input(event: InputEvent) -> void:
+func _input(event: InputEvent) -> void: ## Fallback: stops dragging if mouse is released anywhere (catches clicks outside card area)
 	if is_dragging and event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
 			_stop_dragging()
 
-func _process(_delta: float) -> void:
-	
+func _process(_delta: float) -> void: ## Each frame: calls hover stubs, syncs mover settings, and moves card to mouse when dragging
+
 	if mouse_touching:
 		_mouse_touching();
 	else:
@@ -199,7 +199,7 @@ func _process(_delta: float) -> void:
 		else:
 			global_position = target_pos
 
-func _start_dragging() -> void:
+func _start_dragging() -> void: ## Reparents card to scene root, raises z-index, and begins mouse-following
 	if not is_dragging and dragging_card == null:
 		dragging_card = self 
 		is_dragging = true
@@ -220,7 +220,7 @@ func _start_dragging() -> void:
 		global_position = old_position
 		emit_signal("object_picked_up")
 
-func _stop_dragging() -> void:
+func _stop_dragging() -> void: ## On mouse release: routes card to hand, grid snap, placement area, or fallback to hand
 	if not is_dragging: return
 	
 	is_dragging = false
@@ -251,7 +251,7 @@ func _stop_dragging() -> void:
 
 	emit_signal("object_placed")
 
-func _snap_to_grid(pos: Vector2) -> void:
+func _snap_to_grid(pos: Vector2) -> void: ## Reparents card to the grid's parent and snaps the mover to the nearest valid tile
 	# 1. Reparent so we aren't stuck in Hand space
 	if get_parent() != grid.get_parent():
 		var old_pos = global_position
@@ -307,7 +307,7 @@ func _get_placement_under_mouse() -> PlacementArea2D:
 		if a is PlacementArea2D: return a
 	return null
 
-func _return_to_hand(drop_pos: Vector2) -> void:
+func _return_to_hand(drop_pos: Vector2) -> void: ## Re-inserts the card into the CardHand at the index closest to drop_pos and restores hand visuals
 	if get_parent(): get_parent().remove_child(self)
 	
 	hand.add_child(self)
