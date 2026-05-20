@@ -25,6 +25,16 @@ A node that can be used to create 2D cards for card games
 | **allow_stacking** | `bool` | `false` | Allow multiple cards to occupy the same grid cell |
 | **hand** | `CardHand` | `-` | The CardHand this card belongs to; auto-detected if parent is a CardHand |
 
+### 🔔 Signals
+| Signal | Arguments | Description |
+| :--- | :--- | :--- |
+| **object_picked_up** | - |  Emitted when the card is grabbed by the mouse |
+| **hovering_over_card** | `Card2D` |  Emitted when the mouse enters this card's area |
+| **object_placed** | - |  Emitted when the card is released |
+| **returned_to_hand** | `hand: CardHand` |  Emitted when the card is placed back into a CardHand |
+| **snapped_to_grid** | `coordinate: Vector2`<br>`world_position: Vector2` |  Emitted when the card snaps to a grid cell |
+| **dropped_in_placement_area** | `area: PlacementArea2D` |  Emitted when the card lands on a PlacementArea2D |
+
 ### 🛠️ Methods
 | Method | Arguments | Returns | Description |
 | :--- | :--- | :--- | :--- |

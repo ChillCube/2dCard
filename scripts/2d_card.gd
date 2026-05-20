@@ -47,9 +47,12 @@ var area : Area2D
 # This acts as our internal GridObject controller .
 var grid_logic : GridObject = null
 
-signal object_picked_up
-signal hovering_over_card(Card2D)
-signal object_placed
+signal object_picked_up ## Emitted when the card is grabbed by the mouse
+signal hovering_over_card(Card2D) ## Emitted when the mouse enters this card's area
+signal object_placed ## Emitted when the card is released
+signal returned_to_hand(hand: CardHand) ## Emitted when the card is placed back into a CardHand
+signal snapped_to_grid(coordinate: Vector2, world_position: Vector2) ## Emitted when the card snaps to a grid cell
+signal dropped_in_placement_area(area: PlacementArea2D) ## Emitted when the card lands on a PlacementArea2D
 
 func _ready() -> void: ## Sets up collision, optional Polygon2D mesh, SmoothMovement, and grid logic
 
@@ -245,6 +248,7 @@ func _stop_dragging() -> void: ## On mouse release: routes card to hand, grid sn
 		var target_placement = _get_placement_under_mouse()
 		if target_placement and not target_placement.is_full():
 			target_placement.snap_object(self)
+			dropped_in_placement_area.emit(target_placement)
 		else:
 			# Fallback if dropped in "no man's land"
 			_return_to_hand(drop_pos)
@@ -275,8 +279,9 @@ func _snap_to_grid(pos: Vector2) -> void: ## Reparents card to the grid's parent
 		mover.global_target_position = snapped_world_pos
 	else:
 		global_position = snapped_world_pos
-		
+
 	mover.global_target_rotation = randf_range(-0.2, 0.2);
+	snapped_to_grid.emit(grid_coord, snapped_world_pos)
 	print("Snapped to Grid Pos: ", snapped_world_pos)
 
 ## Helper function to detect if another card is already at the target snapped position
@@ -318,3 +323,4 @@ func _return_to_hand(drop_pos: Vector2) -> void: ## Re-inserts the card into the
 	hand.use_hover_lift = true
 	hand.use_z_index_hover = true
 	hand.use_horizontal_spread = true
+	returned_to_hand.emit(hand)
