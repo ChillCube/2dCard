@@ -277,10 +277,9 @@ func _snap_to_grid(pos: Vector2) -> void: ## Reparents card to the grid's parent
 	# 4. Tell the mover where to go
 	if mover:
 		mover.global_target_position = snapped_world_pos
+		mover.global_target_rotation = randf_range(-0.2, 0.2)
 	else:
 		global_position = snapped_world_pos
-
-	mover.global_target_rotation = randf_range(-0.2, 0.2);
 	snapped_to_grid.emit(grid_coord, snapped_world_pos)
 	print("Snapped to Grid Pos: ", snapped_world_pos)
 
