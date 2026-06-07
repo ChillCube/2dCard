@@ -60,7 +60,7 @@ func _ready() -> void: ## Sets up collision, optional Polygon2D mesh, SmoothMove
 	if fake_3d:
 		_convert_to_polygon()
 	
-	mover = await SmoothMovement.init(self)
+	mover = SmoothMovement.init(self)
 	mover.speed = speed
 	mover.bounce = bounce
 	#mover.skew_on = false;
@@ -225,27 +225,32 @@ func _start_dragging() -> void: ## Reparents card to scene root, raises z-index,
 
 func _stop_dragging() -> void: ## On mouse release: routes card to hand, grid snap, placement area, or fallback to hand
 	if not is_dragging: return
-	
+
 	is_dragging = false
-	dragging_card = null 
+	dragging_card = null
 	z_index = 0;
+
+	if hand:
+		hand.use_hover_lift = true
+		hand.use_z_index_hover = true
+		hand.use_horizontal_spread = true
 	
-	var drop_pos = global_position
-	
+	var drop_pos = get_global_mouse_position()
+
 	# --- Dynamic Logic: Is it hovering over the hand area? ---
 	if hand.is_position_in_hand_zone(drop_pos):
 		# Return to hand
 		_return_to_hand(drop_pos)
 		if grid_logic: grid_logic.continous_movement = false
 		print("Dropped in hand zone.")
-	
+
 	elif use_grid_placement and grid:
 		# Snap to Grid
 		_snap_to_grid(drop_pos)
-		
+
 	else:
 		# Check for specific placement areas (like a play board)
-		var target_placement = _get_placement_under_mouse()
+		var target_placement = _get_placement_at_position(drop_pos)
 		if target_placement and not target_placement.is_full():
 			target_placement.snap_object(self)
 			dropped_in_placement_area.emit(target_placement)
@@ -305,10 +310,15 @@ func _is_grid_position_occupied(target_world_pos: Vector2) -> bool:
 				return true
 	return false
 
-func _get_placement_under_mouse() -> PlacementArea2D:
-	var areas = area.get_overlapping_areas()
-	for a in areas:
-		if a is PlacementArea2D: return a
+func _get_placement_at_position(pos: Vector2) -> PlacementArea2D:
+	var space := get_world_2d().direct_space_state
+	var query := PhysicsPointQueryParameters2D.new()
+	query.position = pos
+	query.collide_with_areas = true
+	query.exclude = [area]
+	for result in space.intersect_point(query):
+		if result.collider is PlacementArea2D:
+			return result.collider
 	return null
 
 func _return_to_hand(drop_pos: Vector2) -> void: ## Re-inserts the card into the CardHand at the index closest to drop_pos and restores hand visuals
