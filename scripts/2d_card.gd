@@ -186,12 +186,12 @@ func _process(_delta: float) -> void: ## Each frame: calls hover stubs, syncs mo
 		_mouse_touching();
 	else:
 		_not_mouse_touching();
-	
+
 	mover.tilt_on = movement_tilt;
 	mover.bounce = bounce;
-	mover.global_target_scale = Vector2(default_scale, default_scale);
 	if is_dragging:
-		mover.global_target_scale = Vector2(grabbed_scale, grabbed_scale);
+		var hand_scale: Vector2 = hand.global_transform.get_scale() if hand else Vector2.ONE
+		mover.global_target_scale = hand_scale * grabbed_scale;
 		if disable_bounce_while_dragging:
 			mover.bounce = false;
 		if disable_movement_tilt_while_dragging:
@@ -201,26 +201,32 @@ func _process(_delta: float) -> void: ## Each frame: calls hover stubs, syncs mo
 			mover.global_target_position = target_pos
 		else:
 			global_position = target_pos
+	else:
+		mover.global_target_scale = Vector2(default_scale, default_scale);
 
 func _start_dragging() -> void: ## Reparents card to scene root, raises z-index, and begins mouse-following
 	if not is_dragging and dragging_card == null:
-		dragging_card = self 
+		dragging_card = self
 		is_dragging = true
-		z_index = 2;
-		
-		# Disable grid logic while dragging so it doesn't fight the mouse
+		z_index = 100;
+
 		if grid_logic: grid_logic.continous_movement = false
-		
+
+		var hand_global_scale: Vector2 = hand.global_transform.get_scale() if hand else Vector2.ONE
+		var drag_scale := hand_global_scale * grabbed_scale
+
 		var old_position = global_position
 		if get_parent() == hand:
 			hand.remove_child(self)
-			# Restore hand state (logic from your original snippet)
 			hand.use_hover_lift = false
 			hand.use_z_index_hover = false
 			hand.use_horizontal_spread = false
 			hand.get_parent().add_child(self)
-		
+
 		global_position = old_position
+		# Immediately show at the correct grabbed size — no grow animation on pickup
+		scale = drag_scale
+		mover.global_target_scale = drag_scale
 		emit_signal("object_picked_up")
 
 func _stop_dragging() -> void: ## On mouse release: routes card to hand, grid snap, placement area, or fallback to hand
@@ -247,6 +253,7 @@ func _stop_dragging() -> void: ## On mouse release: routes card to hand, grid sn
 	elif use_grid_placement and grid:
 		# Snap to Grid
 		_snap_to_grid(drop_pos)
+		_settle_scale(Vector2(default_scale, default_scale))
 
 	else:
 		# Check for specific placement areas (like a play board)
@@ -254,6 +261,7 @@ func _stop_dragging() -> void: ## On mouse release: routes card to hand, grid sn
 		if target_placement and not target_placement.is_full():
 			target_placement.snap_object(self)
 			dropped_in_placement_area.emit(target_placement)
+			_settle_scale(Vector2(default_scale, default_scale))
 		else:
 			# Fallback if dropped in "no man's land"
 			_return_to_hand(drop_pos)
@@ -321,14 +329,28 @@ func _get_placement_at_position(pos: Vector2) -> PlacementArea2D:
 			return result.collider
 	return null
 
+func _settle_scale(target: Vector2) -> void: ## Animates scale to target with a spring overshoot instead of a linear lerp
+	mover.scale_on = false
+	var tween := create_tween()
+	tween.tween_property(self, "scale", target, 0.4)\
+		.set_trans(Tween.TRANS_SPRING)\
+		.set_ease(Tween.EASE_OUT)
+	tween.tween_callback(func(): mover.scale_on = true)
+
 func _return_to_hand(drop_pos: Vector2) -> void: ## Re-inserts the card into the CardHand at the index closest to drop_pos and restores hand visuals
+	var old_global_scale := global_transform.get_scale()
+
 	if get_parent(): get_parent().remove_child(self)
-	
+
 	hand.add_child(self)
 	var new_index = hand.get_index_at_position(drop_pos)
 	hand.move_child(self, new_index)
-	
+
 	global_position = drop_pos
+	# Preserve the visual scale under the new parent so SmoothMovement can lerp from here
+	var hand_global_scale := hand.global_transform.get_scale()
+	scale = old_global_scale / hand_global_scale
+
 	hand.use_hover_lift = true
 	hand.use_z_index_hover = true
 	hand.use_horizontal_spread = true
